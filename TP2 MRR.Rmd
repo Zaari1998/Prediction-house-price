@@ -1,0 +1,316 @@
+---
+title: "TP2 MRR"
+author: "Andrieu Carla et Zaari Abdelouahab"
+date: "15/10/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+## IV. Real estate data
+
+```{r, echo=FALSE, message=FALSE}
+rm(list=ls())
+graphics.off()
+
+library(ggplot2)
+library(corrplot)
+library(glmnet)
+library(scales)
+library(gridExtra)
+```
+
+```{r}
+
+housedata <- read.csv("C:\\Users\\Lenovo\\Desktop\\S3\\Régression régularisée\\Dataset\\housedata.csv")
+data <- housedata
+#removing id and date columns
+data$id <- NULL
+data$date <- NULL
+```
+
+Dans un premier temps, après avoir récupéré les données, nous allons calculer le pourcentage des données manquantes :
+
+```{r}
+sum(is.na(data)) / (nrow(data) *ncol(data))
+```
+
+D'abord, on va voir la distribution et la forme de la valeur price que l'on souhaite prédire :
+
+```{r}
+ggplot(data=data , aes(x=price)) +
+  geom_histogram(fill="blue", binwidth = 75000) +
+  scale_x_continuous(breaks= seq(0, 3000000, by=1000000), labels = comma)
+```
+
+On peut constater que la distribution des prix de vente des maisons semble suivre une loi normale centrée en 500 k€. Très peu de maisons ont un prix au-delà d'un million. On va chercher à déterminer les variables qui ont une corrélation très grande avec la valeur price :
+
+```{r}
+M <- cor(data)
+corrplot.mixed(M, tl.col="black",order = 'AOE',tl.pos = "lt")
+```
+
+On peut clairement voir qu'il y a une grande corrélation entre la variable *sqft_living* et *price* avec une corrélation de 0.7 ainsi *price* et *grade* d'une valeur d'environ 0.67. On peut aussi constater une très grande multicolinéarité entre *sqft_living* et *sqft_above* ,*grade*, *sqft_living15*, *bathrooms*. Celle-ci peut causer une dégradation en terme prédiction pour notre modèle. Pour avoir plus d'informations précises sur nos données, nous utilisons la fonction *summary* :
+
+```{r}
+str(data)
+summary(data)
+```
+
+On va visualiser la distribution de la variable *sqft_living* qui est la plus variable corrélée avec le prix de la maison :
+
+```{r}
+ggplot(data, aes(x =sqft_living , y = price)) +
+  geom_point(col="red",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="black")
+```
+
+On peut clairement constater qu'il ya des valeurs qui sont extrèmes. Généralement, plus la suraface de la maison est grande plus le prix augmente ce qui est le cas. Cependant, ici le prix ne parait pas si élevé en comparaison avec la surface de la maison donc, cette variable risque de biaiser la prédiction du modèle et donner une grande RMSE.
+
+Maintenant, visualisons l'effet de la variable *grade* qui est aussi une variable corrélée avec le prix :
+
+```{r}
+ggplot(data=data , aes(x=factor(grade), y=price))+
+  geom_boxplot(col='black') + labs(x='grade') +
+  scale_y_continuous(breaks= seq(0,4000000, by=500000), labels = comma)
+```
+
+On constate aussi des valeurs anormales pour notre modèlecomme les valeurs en 11 et 13 pour la variable *grade*. Celles-ci qui peuvent causer des problèmes de prédiction pour notre modèle final.
+
+Visualisons aussi la multicolinéarité entre *sqft_living* et *sqft_above*, *grade*, *sqft_living15*, *bathrooms*. Voici 4 distributions :
+
+* la distribution *sqft_living* en fonction de la variable *bathrooms* concernant les salles de bains ;
+* la distribution *sqft_living* en fonction de *grade* la note de la maison ;
+* la distribution *sqft_living* en fonction du *sqft_above* ;
+* la distribution *sqft_living* en fonction du *sqft_living15*.
+
+```{r}
+p1<-ggplot(data , aes(x=factor(bathrooms), y=sqft_living))+
+  geom_boxplot(col='black') + labs(x='bathrooms') +
+  scale_y_continuous(breaks= seq(0,4000000, by=500000), labels = comma)
+
+p2<-ggplot(data , aes(x=factor(grade), y=sqft_living))+
+  geom_boxplot(col='black') + labs(x='grade') +
+  scale_y_continuous(breaks= seq(0,4000000, by=500000), labels = comma)
+
+p3<-ggplot(data, aes(x = sqft_above , y = sqft_living)) +
+  geom_point(col="red",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="black")
+
+p4<-ggplot(data, aes(x = sqft_living15 , y = sqft_living)) +
+  geom_point(col="blue",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="black")
+
+grid.arrange(p1, p2, p3, p4, ncol=2, nrow = 2)
+```
+
+On peut clairement constater dans ce cas aussi qu'il ya des valeurs extrèmes. Par exemple, pour la note *grade* de 12 contrairement à la variable *bathrooms* qui reste logique car plus la surface augment plus le nombre de salle de bain augmente.
+
+En revanche, nous constatons clairement avec la distribution des observations entre *sqft_above* et *sqft_living* une grande colinéarité (redondance) qui peut affecter les résultats de notre modèle. Donc le choix le plus optimal est de supprimer la variable *sqft_above* de notre base de données.
+
+```{r}
+# Suppression de la variable sqft_above
+data$sqft_above <- NULL
+```
+
+On va utiliser maintenant la méthode de **cross validation**. Pour se faire, nous divisons les données de notre base de données en deux ensembles :
+
+* un ensemble d'apprentissage sur lequel s'entraînera notre modèle (70% des données) ;
+* un ensemble de test, nommé *test*, avec lequel nous testerons notre modèle (30% restant).
+
+Les données pour les deux data set sont tirées de manière aléatoire.
+
+```{r}
+set.seed(2)
+# Fractionnement des données en apprentissage et test
+data_Split <- sort(sample(nrow(data),nrow(data)*.70))
+train <- data[data_Split,]
+test <- data[-data_Split,]
+```
+
+On peut ainsi créer notre premier modèle et commencer à réaliser des prédictions avec :
+
+```{r}
+model <- lm(price~.,data=train)
+summary(model)
+```
+
+```{r}
+pred <- predict(model,test)
+
+#Ploting
+par(mfrow=c(1,1)) 
+ggplot(test, aes(x = pred, y = price)) +
+  geom_point(col="blue",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="red")
+```
+
+Comparaison entre le prix réel et le prix prédit et affichage de nos résultats : 
+
+```{r}
+results <- data.frame(actual =test$price,prediction=pred)
+head(results)
+```
+
+
+```{r}
+plot(test$price,type="b", pch=5, col="red",ylab="Price",main="Actual vs Predicted price")
+# Ajouter une ligne
+lines(pred, pch=10, col="blue", type="b", lty=2)
+# Ajouter une légende
+legend("topleft",legend=c("Actual price", "Predicted price"),
+       col=c("red", "blue"), lty=1:2000, cex=0.8)
+```
+
+Maintenant on affiche le plot Normal Q-Q plot pour avoir une idée sur l'asymétrie de la variable *price* que l'on souhaite prédire :
+
+```{r}
+qqnorm(data$price)
+qqline(data$price)
+```
+
+On peut clairement constater que notre variable n'est pas normalement distribuée. Pour corriger ce problème, et avant de débuter notre modélisation avec Lasso et Ridge régression, on normalise notre base de données pour avoir plus de précision en terme prédiction et d'erreur. Pour cela, nous utilisons la fonction *log* puis on re-effectue le test de normalité QQplot :
+
+```{r}
+data$price <- log(data$price)
+
+qqnorm(data$price)
+qqline(data$price)
+```
+
+Désormais, nous pouvons observer que la variable est distribuée de facon normale. On peut donc l'utiliser pour la modélisation car elle vérifie l'hypothèse d'être Gaussienne. Par la suite, on peut aussi supprimer la variable *sqft_basement* car l'information donnée par celle-ci est déjà contenue dans les autres variables et est donc redondante.
+
+Ajustons notre modèle en éliminant la colonne *sqft_basement* avec de nouveaux train dataset  et test dataset :
+
+```{r}
+data$sqft_basement <- NULL
+train <- data[data_Split,]
+test <- data[-data_Split,]
+```
+
+```{r}
+# Variables prédictives
+X <- model.matrix(price~., data= train)[,-1]
+# Variable de résultat (Target)
+Y<- train$price
+```
+
+Nous allons utiliser la fonction R *glmnet()* pour calculer les modèles de régression linéaire pénalisés et nous allons prendre alpha=1. Premièrement, nous allons travailler avec la méthode de lasso :
+
+```{r}
+glmnet(X, Y, alpha = 1 , lambda = NULL)
+```
+
+Nous spécifions une constante lambda pour ajuster le montant du coefficient de retrait et nous allons utiliser après la fonction *cv.glmnet()* pour identifier la meilleure valeur lambda qui minimise l'erreur quadratique moyenne du modèle. 
+
+Nous trouvons le meilleur lambda en utilisant cross-validation :
+
+```{r}
+set.seed(123) 
+model_cross_valid <- cv.glmnet(X, Y, alpha = 1)
+```
+
+Puis, on affiche la meilleure valeur de lamnbda pour notre modèle :
+
+```{r}
+best_lambda <-model_cross_valid$lambda.min
+best_lambda
+```
+
+On peut comparer la MSE (**M**ean **S**quare **E**rror) en fonction de la valeur de lambda :
+
+```{r}
+plot(model_cross_valid)
+```
+
+Enfin, on ajuste le modèle final avec les données d'entraînement :
+
+```{r}
+model <- glmnet(X, Y, alpha = 1, lambda = best_lambda)
+# affichons les coefficients de la régression
+coef(model)
+```
+
+La partie apprentissage étant terminée, nous allons tester le modèle sur notre ensemble de données de test :
+
+```{r}
+X_test <- model.matrix(price ~., test)[,-1]
+
+pred_lasso <- predict(model,s=best_lambda,newx= X_test)
+```
+
+Deuxièmement, on va tester le modèle sur la régression Ridge afin de comparer les résultats de la régression linéaire et les régressions de Ridge et lasso. Avec la même méthode que précédement :
+
+* nous trouvons le meilleur lambda en utilisant cross-validation ;
+* on affiche le tracé de la MSE pour le test par rapport à la valeur de lambda ;
+* on ajuste le modèle final sur les données d'entraînement.
+
+```{r}
+set.seed(123) 
+model_cross_valid <- cv.glmnet(X, Y, alpha = 0)
+# on affiche la meilleure valeur de lamnbda
+best_lambda <-model_cross_valid$lambda.min
+best_lambda
+```
+
+```{r}
+plot(model_cross_valid)
+```
+
+```{r}
+model <- glmnet(X, Y, alpha = 0, lambda = best_lambda)
+# affichons les coefficients de la régression
+coef(model)
+```
+
+Enfin, on va tester sur notre test dataset et éffectuer les prédictions :
+
+```{r}
+X_test <- model.matrix(price ~., test)[,-1]
+
+pred_Ridge <- predict(model,s=best_lambda,newx= X_test)
+```
+
+## Résultats
+
+### Comparaison des trois modèles sur les prédictions du prix 
+
+```{r}
+#Ploting pred vs price 
+r1<- ggplot(test, aes(x = pred, y = price)) +
+  geom_point(col="red",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="black")
+
+
+#Ploting pred_lasso vs price 
+r2<- ggplot(test, aes(x = pred_lasso, y = price)) +
+  geom_point(col="black",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="red")
+
+
+#Ploting pred_Ridge vs price 
+r3 <- ggplot(test, aes(x = pred_Ridge, y = price)) +
+  geom_point(col="blue",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="black")
+
+grid.arrange(r1, r2, r3,ncol=3, nrow = 1)
+```
+
+### Comparaisons des erreurs de nos trois modèles
+
+```{r}
+RMSE_lasso <- sqrt(mean(pred_lasso-test$price)^2)
+RMSE_Ridge <- sqrt(mean(pred_Ridge-test$price)^2)
+SSE_lasso <- sum((pred_lasso - test$price)^2)
+SSE_Ridge <- sum((pred_Ridge - test$price)^2)
+SST <- sum((test$price - mean(test$price))^2)
+#RMSE et R squared
+results_RMSE <- data.frame(RMSE_RIDGE=RMSE_Ridge,
+                           RMSE_LASSO=RMSE_lasso,
+                           R_SQUARED_RIDGE=1-(SSE_Ridge/SST),
+                           R_SQUARED_lasso=1-(SSE_lasso/SST))
+results_RMSE
+```
+
+Pour conclure, nous pouvons bien constater que les modèles de régression régularisés Ridge et Lasso fonctionnent mieux en terme de prédiction et d'erreur que le modèle de régression linéaire. De plus, d'après la comparaison entre Lasso et Ridge, on constate que la régression Ridge est meilleure en terme de prédiction et d'erreur quadratique moyenne (0.00207 < 0.00221).

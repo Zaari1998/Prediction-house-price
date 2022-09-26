@@ -1,0 +1,285 @@
+---
+title: "TP3"
+author: "Andrieu Carla et Zaari Abdelouahab"
+date: "18/10/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+## IV. Real estate data
+
+```{r, echo=FALSE, message=FALSE}
+rm(list=ls())
+graphics.off()
+
+library(ggplot2)
+library(corrplot)
+library(glmnet)
+library(scales)
+library(gridExtra)
+library(ROCR)
+```
+
+```{r}
+# TODO : Adjust the path of the housedata file
+data <- read.table("C://Users//Lenovo//Desktop//S4//IMF//SAN.PA.csv",header=TRUE,
+                   sep=',')
+data <- SAN_PA
+```
+
+
+```{r}
+plot(data$Date,data$`Adj Close`,type='l'
+     ,main = "Adjusted close = f(time)", 
+      sub = "Plot1 : Evolution du prix de clôture ajusté au cours du temps", 
+      xlab = "Date", ylab = "Adj close", 
+      col.main = "red", col.sub = "green", col.lab = "blue", font.main = 4, font.lab = 3)
+legend(x = 'topleft', legend = 'SAN_PA', lty = 1, lwd = 2, col = 'blue')
+
+
+```
+```{r}
+#SAN.PA_prices <- data[, "Adj Close", drop = FALSE]
+
+# Denote n the number of time periods:
+#n <- nrow(SAN.PA_prices)
+
+#SAN_PA_ret <- ((SAN.PA_prices[2:n, 1] - SAN.PA_prices[1:(n-1), 1])/SAN.PA_prices[1:(n-1), 1])
+#names(SAN_PA_ret) <- data[2:n, 1]
+
+#head(SAN_PA_ret)
+for (i in 1:length(data$Date)){
+  a[i] = (data$`Adj Close`[i+1] - data$`Adj Close`[i]) / data$`Adj Close`[i]
+}
+
+```
+
+
+```{r}
+
+plot(data$Date,a*100, type='l',ylab = "Return",
+               main = "daily Returns")
+# Plot the returns on a same graph
+```
+La volatilité annualisée:
+```{r}
+sd(a)
+sqrt(zzzz
+
+```
+
+
+```{r}
+plot(da, type = "l", col = "blue", lwd = 2, ylab = "Return",
+               main = "Monthly Returns on SBUX")
+
+# Add horizontal line at zero
+abline(h = 0)
+
+# Add a legend
+legend(x = "bottomright", legend = c("Simple", "CC"), lty = 1, 
+       lwd = 2, col = c("blue", "red"))
+```
+
+
+```{r}
+#plot(1:length(data$Date)-1,a)
+lentgh(data$)
+```
+
+
+```{r}
+# Add the continuously compounded returns
+lines(sbux_ccret, col = "red", lwd = 2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, message=FALSE}
+medianHousePrice=median(data$price);
+data$medHousePriceBin=as.numeric(data$price>medianHousePrice);
+```
+
+Pourcentage des données manquantes : 0%
+```{r}
+sum(is.na(data)) / (nrow(data) *ncol(data))
+```
+On veut prédire la variable medHousePriceBin donc il n'est pas nécessaire de garder la variable price dans notre modèle
+```{r}
+data$price <- NULL
+```
+
+Visualisons la colinéarité entre la variable que l'on veut prédire avec les autres variables :
+
+```{r}
+M <- cor(data)
+corrplot.mixed(M, tl.col="black",order = 'AOE',tl.pos = "lt")
+```
+
+
+On trace des boxplots pour connaître la corrélation entre les variables :
+
+```{r}
+p_1 <- ggplot(data , aes(x=grade))+
+  geom_boxplot(col='black') + labs(x='grade')
+p_2 <- ggplot(data , aes(x=sqft_living))+
+  geom_boxplot(col='blue') + labs(x='sqft_living')
+p_3 <- ggplot(data , aes(x=sqft_living15))+
+  geom_boxplot(col='black') + labs(x='sqft_living15')
+p_4 <- ggplot(data , aes(x= sqft_above))+
+  geom_boxplot(col='red') + labs(x='sqft_above')
+p_5 <- ggplot(data , aes(x=bathrooms))+
+  geom_boxplot(col='blue') + labs(x='bathrooms')
+grid.arrange(p_1,p_2,p_3,p_4,p_5, ncol=2, nrow = 3)
+```
+
+Ensuite, on veut visualiser la colinéarité de ces variables et la distribution avec les autres variables du modèle
+
+```{r}
+p1 <- ggplot(data,aes(x= sqft_above, y=sqft_living)) + 
+  geom_smooth() + geom_point(aes(shape =factor(medHousePriceBin),color=factor(medHousePriceBin)))+
+  scale_shape_manual(values = c(5,17)) +
+  scale_color_manual(values = c("#00AFBB", "#FC4E07"))+
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p2 <- ggplot(data,aes(x= grade, y=sqft_living)) + 
+  geom_smooth() + geom_point(aes(shape =factor(medHousePriceBin),color=factor(medHousePriceBin)))+
+  scale_shape_manual(values = c(5,17)) +
+  scale_color_manual(values = c("#00AFBB", "#FC4E07"))+
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p3 <- ggplot(data,aes(x= bathrooms, y=sqft_living)) + 
+  geom_smooth() + geom_point(aes(shape =factor(medHousePriceBin),color=factor(medHousePriceBin)))+
+  scale_shape_manual(values = c(5,17)) +
+  scale_color_manual(values = c("#00AFBB", "#FC4E07"))+
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p4 <- ggplot(data,aes(x= sqft_living15, y=sqft_living)) + 
+  geom_smooth() + geom_point(aes(shape =factor(medHousePriceBin),color=factor(medHousePriceBin)))+
+  scale_shape_manual(values = c(5,17)) +
+  scale_color_manual(values = c("#00AFBB", "#FC4E07"))+
+  theme_minimal() +
+  theme(legend.position = "top")
+
+grid.arrange(p1, p2, p3, p4, ncol=2, nrow = 2)
+```
+
+On peut clairement observer d'après les 4 graphiques montrant la distribution de la variable sqft_living que les autres variables sont corrélées à celle-ci. On constate que la valeur des variable grade, sqft_above, bathrooms, sqft_living15 augmente avec la surface de la maison ce qui engendre une augmentation du prix (voir les observations en orange). Ceci est logique car l'augemantation de la surface entraine l'augmentation des autres caractéristiques de la maison qui conduit par la suite à un prix élevé de la maison.
+
+D'après les observations des graphes, on peut clairement constater que la distribution des observations entre sqft_above et sqft_living entraine une grande colinéarité qui peuvent aussi affecter les résultats du modèle. Nous choisissons alors de supprimer la variable sqft_above de notre base de données :
+
+```{r}
+data$sqft_above <- NULL
+```
+
+On va utiliser maintenant la méthode de cross validation. Pour cela nous divisons les données de notre base de données en deux ensembles :
+
+* un ensemble d'apprentissage 
+* un ensemble de test
+
+```{r}
+set.seed(2)
+data_Split <- sort(sample(nrow(data),nrow(data)*.70))
+train <- data[data_Split,]
+test <- data[-data_Split,]
+```
+
+```{r}
+#Création du modèle
+model_1 <- glm(medHousePriceBin~.,data=train,family="binomial")
+summary(model_1)
+```
+On a pour ce premier modèle AIC: 10339 et on constate que les variables yr_renovated et sqft_lot15 ne sont pas significatives d'après les tests statistiques.
+
+On va tester un deuxième modèle en utilisant la méthode de selection de variables backward, forward, stepwise pour avoir un modèle fiable pour réaliser les prédictions de notre variable medHousePriceBin
+
+```{r}
+model_1_backward = step(model_1,direction='backward'); 
+summary(model_1_backward)
+```
+
+
+Pour ce modèle de sélection backward on a trouvé que AIC=10335 c'est mieux que le modèle précédent. De plus, d'après les tests statistiqueles ce nouveau modèle les variables yr_renovated et sqft_lot15 sont considérées comme signifiatives.
+
+Avec la sélection forward :
+
+```{r}
+model_1_forward = step(model_1,direction='forward'); 
+summary(model_1_forward)
+```
+
+On a trouvé AIC: 10339, mais il y a encore dans le modèle des variables qui ne sont pas significatives.
+
+Avec la selection stepwise :
+
+```{r}
+model_1_stepwise = step(model_1,direction='both'); 
+summary(model_1_stepwise)
+```
+
+On a de meilleurs résultats avec la séléction forward et semblable au backward donc on peut garder ce modèle pour réaliser les prédictions.
+
+On va choisir ce troisième modèle pour réaliser les prédictions.
+
+```{r}
+#Evaluation du modèle 
+pred_test <- predict(model_1_stepwise,test,type="response")
+```
+
+On affiche le graphe ROC qui va nous aider à choisir threshold pour notre modèle
+
+```{r}
+roc_pred <- prediction(pred_test,test$medHousePriceBin)
+roc_test = performance(roc_pred, measure = "tpr", x.measure = "fpr")
+plot(roc_test,colorize=TRUE)
+```
+
+D'après la ROC curve générée, on peut prendre un seuil de 0.5. En effet, c'est la meilleure valeur pour notre modèle afin d'avoir de bons résultats en terme de prédiction et donc moins d'erreur. Après avoir choisit ce seuil, on obtiens la matrice de confusion composée des faux et vrais positifs et négatifs.
+
+```{r}
+pred_test <- ifelse(pred_test>0.5,1,0) 
+tab_prediction <- table(prediction=pred_test,actuelle=test$medHousePriceBin)
+tab_prediction
+```
+```{r}
+model_accuracy <- (sum(diag(tab_prediction))/sum(tab_prediction))*100
+paste("La précision de notre modèle est",model_accuracy,"%")
+```
+

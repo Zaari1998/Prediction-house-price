@@ -1,0 +1,288 @@
+---
+title: "TP1 MRR"
+author: "Abdelouahab Zaari et Carla Andrieu"
+date: "9/29/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r, echo=FALSE}
+rm(list=ls())
+graphics.off()
+```
+
+## IV. Application: GAFAM or BATX data set
+
+Les données sont composées du revenu annuel de Facebook en million de dollars et du nombre de million d'utilisateurs par an depuis 2010 jusqu'au deuxième trimestre 2021. Nous avons récupéré les données du site : https://www.investopedia.com/terms/q/quarter.asp
+
+```{r}
+data <- data.frame(Date=c("Q1 2010","Q2 2010","Q3 2010","Q4 2010"
+         ,"Q1 2011","Q2 2011","Q3 2011","Q4 2011"
+         ,"Q1 2012","Q2 2012","Q3 2012","Q4 2012"
+         ,"Q1 2013","Q2 2013","Q3 2013","Q4 2013"
+         ,"Q1 2014","Q2 2014","Q3 2014","Q4 2014"
+         ,"Q1 2015","Q2 2015","Q3 2015","Q4 2015"
+         ,"Q1 2016","Q2 2016","Q3 2016","Q4 2016"
+         ,"Q1 2017","Q2 2017","Q3 2017","Q4 2017"
+         ,"Q1 2018","Q2 2018","Q3 2018","Q4 2018"
+         ,"Q1 2019","Q2 2019","Q3 2019","Q4 2019"
+         ,"Q1 2020","Q2 2020","Q3 2020","Q4 2020"
+         ,"Q1 2021","Q2 2021")
+    
+         ,Revenue=c(345,431,467,731,737,895,954,
+                    1131,1058,1184,1262,1585,1458,
+                    1813,2016,2585,2502,2910,3203,
+                    3851,3543,4042,4501,5842,5382,6436,
+                    7011,8809,8032,9321,10328,12972,11966,
+                    13231,13727,16914,15077,16886,17652,21082,
+                    17737,18687,21470,28071,26171,29080)
+        
+         ,Users=c(431,482,550,608,680,739,800,845,901,955,
+                  1007,1056,1110,1155,1189,1228,1276,1317,1350,
+                  1393,1441,1490,1545,1591,1645,1712,1788,1860,1936,2006,
+                  2072,2129,2196,2234,2271,2320,2375,2414,2449,2498,2603,
+                  2701,2740,2797,2853,2900))
+```
+
+
+Pour avoir une visibilité claire des données, on commence par afficher deux histogrammes :
+
+* le premier affiche l'évolution du revenue de Facebook
+* le second affiche le nombre d'utilisateurs par année
+
+```{r, echo=FALSE}
+library(ggplot2)
+
+my_funct <- function(data, column_to_plot, labels_vec,col_c,x_n,y_n,rot_angle) {
+  plt <- barplot(data[[column_to_plot]],col =col_c,xlab=x_n,ylab=y_n, xaxt="n")
+  text(plt, par("usr")[3], labels = labels_vec, srt = rot_angle, adj = c(1.1,1.1),
+       xpd = TRUE, cex=0.65) 
+}
+my_funct(data,"Revenue",data$Date,"cyan","Years",
+         "Facebook revenues by year", 80)
+```
+
+```{r, echo=FALSE}
+my_funct(data,"Users",data$Date,"red","Years",
+         "Facebook users by year", 80)
+```
+
+On constate que le revenu annuel de Facebook croît de manière exponentielle tandis que le nombre d'utilisateurs croît de manière linéaire. Ensuite, on affiche le nombre d'utilisateurs en fonction des revenus :
+
+```{r}
+ggplot(data, aes(x = Revenue, y = Users)) +
+  geom_point(col="blue",pch=19)
+```
+
+Après avoir pris connaissance des données, nous pouvons désormais créer notre modèle grâce à la fonction *lm* puis nous pouvons faire un premier test de prédiction des revenus grâce au modèle créé :
+
+```{r}
+model <- lm(Revenue~Users,data=data)
+summary(model)
+```
+```{r}
+Revenue_Predict <- predict(model,data)
+
+ggplot(model, aes(x = Revenue_Predict, y = Revenue),
+       xlab="Revenue prediction",ylab="Actual Revenue") +
+  geom_point(col="red",pch=19) +
+  stat_smooth(method = 'lm',formula = y~x,col="blue")
+```
+
+On vérifie si le modèle est performant grâce à sa précision (*accuracy*) en utilisant la RMSE (**R**oot **M**ean **S**quare **E**rror) :
+
+```{r}
+RMSE <- sqrt(mean(Revenue_Predict-data$Revenue)^2)
+RMSE
+```
+
+Nous obtenons une précision de l'ordre de $10^{-12}$. Plus cette valeur est proche de 0, meilleur est l'ajustement aux données. Améliorons notre modèle en utilisant les revenus normalisés :
+
+```{r}
+Revenue_normalize <- log10(data$Revenue)
+
+model_2 <- lm(Revenue_normalize~Users,data=data)
+summary(model)
+```
+Voici une comparaison entre les revenus normalisés réels et ceux prédits ainsi qu'un graphique les représentant :
+
+```{r}
+Revenue_Predict_norm <- predict(model_2,data)
+
+Comparaison <- data.frame(Revenue_normalize,Revenue_Predict_norm)
+
+Comparaison
+```
+```{r}
+ggplot(model_2, aes(x = Revenue_Predict, y = Revenue_normalize),
+       xlab="Revenue prediction",ylab="Actual Revenue") +
+  geom_point(col="red",pch=19) +
+  stat_smooth(method = 'lm',formula = y~x,col="blue")
+```
+
+Nous avons désormais une nouvelle RMSE :
+
+```{r, echo=FALSE}
+RMSE <- sqrt(mean(Revenue_Predict_norm-Revenue_normalize)^2)
+RMSE
+```
+La précision de notre second modèle est de l'ordre de $10^{-18}$. Nous pouvons en conclure que la RMSE de notre second modèle est meilleure qu'elle celle du premier ($9.66e-18 << 2.39e-12$).
+
+
+```{r, echo=FALSE, message=FALSE}
+library(ggpp)
+library(ggpmisc)
+```
+
+
+
+## V. Real estate data
+
+```{r, echo=FALSE, message=FALSE}
+rm(list=ls())
+graphics.off()
+
+library(ggplot2)
+library(corrplot)
+
+# TODO : Adjust the path of the housedata file
+data <- read.csv("C:\\Users\\Lenovo\\Desktop\\S3\\housedata.csv")
+```
+
+Après avoir nettoyé l'environnement et enregistré les nouvelles données du fichier *housedata* dans la variable *data*, nous commençons par supprimer les colonnes *id* et *date*. 
+
+```{r}
+data$id <- NULL
+data$date <- NULL
+```
+ 
+Puis, nous calculons le pourcentage de données manquantes afin de s'assurer de travailler avec des données complètes. Le résultat suivant nous montre qu'aucunes données n'est manquantes.
+ 
+```{r}
+sum(is.na(data)) / (nrow(data) *ncol(data))
+```
+
+Par suite, il est possible de visualiser la corrélation entre les variables grâce à la fonction *cor* :
+
+```{r}
+M <- cor(data)
+corrplot(M, order = 'hclust', addrect = 2)
+```
+
+On constate que certaines données sont très fortement corrélées comme la surface habitable *sqft_living* et la surface hors sol *sqft_above* tandis que d'autre ne le sont pas. L'objectif étant de trouver un modèle linéaire afin de prédire le prix, nous pouvons déjà avoir une idée des varibales qui auront de l'impotance dans le calcul du prix. Par exemple, le prix semble être fortement corrélé à la surface habitable ($\approx 0.8$), la note *grade* ($\approx 0.6$) et un peu corrélé à la variable salle de bain *bathroom* ($\approx 0.3$). Plus le coéfficient de corrélation est proche de 1, plus les variables sont corrélées.
+
+Il est aussi possible d'avoir des informations sur les données grâce à la fonction *summary* (voir ci-dessous) comme la moyenne de chaque variable, leur minimum etmaximum, les quartiles, etc.
+
+```{r}
+str(data)
+summary(data)
+```
+
+Nous allons maintenant séparer notre data set en deux data set indépendants afin d'avoir un ensemble de données pour l'entraînement de notre modèle (variable *train*) et un ensemble pour le tester (variable *test*).
+
+
+```{r}
+set.seed(2)
+data_Split <- sort(sample(nrow(data),nrow(data)*.70))
+train <- data[data_Split,]
+test <- data[-data_Split,]
+```
+
+```{r}
+model <- lm(price~.,data=train)
+summary(model)
+```
+
+On constate d'après le message *Coefficients: (1 not defined because of singularities)* que Certaines des variables ne sont pas définies. En effet, la singularité signifie que les variables ne sont pas linéairement indépendantes. Si on supprime la variable qui retourne NA (*sqft_basement*) dans le résumé ci-dessus, alors le résultat pour les autres variables reste inchangé. En effet, l'information donnée par cette variable est déjà contenue dans les autres variables et est donc redondante.
+
+Ajustons notre modèle en éliminant la colonne *sqft_basement* :
+
+```{r}
+data$sqft_basement <- NULL
+```
+
+En suivant le même processus que précédement, nous obtenons un nouveau modèle :
+
+```{r}
+set.seed(2)
+data_Split <- sort(sample(nrow(data),nrow(data)*.70))
+train <- data[data_Split,]
+test <- data[-data_Split,]
+
+model <- lm(price~.,data=train)
+summary(model)
+```
+
+Ainsi nous pouvons lire les coéfficients estimés pour chaque variable comme par exemple 4.893e+04 pour la variable salle de bain ou encore 1.364e+02 pour la surface habitable. Nous avons aussi le résultat des tests statistiques comme l'erreur standard. La dernière colonne qui contient les astérisques \* indique le risque de se tromper. Plus il y a d'astérisques, plus le risque de se tromper est faible. Deux étoiles correspondent à un risque de première espèce $\alpha$ de $10^{-2}$. Si la p-value est inférieure au risque $\alpha$, alors on conserve le coéfficient. Cependant, si la p-value est supérieure au risque $\alpha$, alors on accèpte l'hypothèse que le coéfficient soit nul et donc que le prix ne dépende pas de celui-ci.
+
+Enfin, on calcul la prédiction grâce à notre modèle sur l'échantillon de test puis on affiche le résultat :
+
+```{r}
+pred <- predict(model,test)
+
+ggplot(test, aes(x = pred, y = price)) +
+  geom_point(col="blue",pch=19) +
+  stat_smooth(formula = y~x ,method = 'lm',col="red")
+```
+
+Voici une comparaison entre le prix réel et le prix prédit ainsi qu'un graphique illustrant cette comparaison :
+
+```{r}
+results <- data.frame(actual =test$price,prediction=pred)
+head(results)
+```
+
+```{r}
+# Affichage du prix réel en rouge
+plot(test$price,type="b", pch=19, col="red",ylab="Price",main="Actual vs Predicted price")
+# Ajout du prix prédit en bleu
+lines(pred, pch=19, col="blue", type="b", lty=2)
+# Ajout de la légende
+legend("topleft",legend=c("Actual price", "Predicted price"),
+       col=c("red", "blue"), lty=1:2000, cex=0.8)
+```
+Pour conclure, nous calculons la précision de notre modèle :
+
+```{r}
+RMSE <- sqrt(mean(pred-test$price)^2)
+RMSE
+```
+La précision n'est pas bonne car elle est très grande donc on ne peut pas valider notre modèle, mais il y a une solution c'est de normaliser la variable qu'on veut prédire tout en utilisant la fonction log :
+
+```{r}
+data$price_normalize <- log(data$price)
+```
+Ensuite on va diviser nos données en apprentissage et du test et créant le nouveau modèle :
+```{r}
+set.seed(2)
+#Data test and train split
+data_Split <- sort(sample(nrow(data),nrow(data)*.70))
+train <- data[data_Split,]
+test <- data[-data_Split,]
+
+#We create the model
+model_normalize <- lm(price_normalize~.,data=train)
+#Prediction
+pred <- predict(model_normalize,test)
+```
+Ensuite on affiche le graphe *Actual vs predicted price*:
+
+```{r}
+plot(test$price_normalize,type="b", pch=19, col="red",ylab="Price",main="Actual vs Predicted price")
+# Ajouter une ligne
+lines(pred, pch=19, col="blue", type="b", lty=2)
+# Ajouter une légende
+legend("topleft",legend=c("Actual price", "Predicted price"),
+       col=c("red", "blue"), lty=1:2000, cex=0.8)
+```
+Et finalement on affiche **RMSE** de notre nouveau modèle:
+```{r}
+RMSE <- sqrt(mean(pred-test$price_normalize)^2)
+RMSE
+```
+Donc comme conclusion on a pu trouver RMSE d'ordre *0.002* qui est une bonne valeur pour la validation du modèle.
+
+
